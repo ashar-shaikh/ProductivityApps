@@ -430,7 +430,8 @@
                 if (!Array.isArray(importedTransactions)) throw new Error("Invalid JSON format");
 
                 importedTransactions.forEach(transaction => {
-                    transaction.reconciled = transaction.reconciled || false; // Default reconciled to false if not present
+                    // Ensure each imported transaction has a reconciled field
+                    transaction.reconciled = transaction.reconciled ?? false;
                     transactions.push(transaction);
                 });
 
@@ -440,6 +441,15 @@
             } catch (error) {
                 alert("Invalid JSON format");
             }
+        }
+
+        async function exportToJson() {
+            const json = JSON.stringify(transactions, null, 2);
+            navigator.clipboard.writeText(json).then(() => {
+                alert("Data copied to clipboard as JSON");
+            }).catch(() => {
+                alert("Failed to copy data to clipboard");
+            });
         }
 
         async function exportToPdf() {
@@ -456,6 +466,14 @@
             });
 
             pdf.save("transactions.pdf");
+        }
+
+        function openImportModal() {
+            document.getElementById("importModal").style.display = "block";
+        }
+
+        function closeImportModal() {
+            document.getElementById("importModal").style.display = "none";
         }
     </script>
 </body>
