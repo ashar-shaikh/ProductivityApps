@@ -313,17 +313,9 @@
     </div>
 
     <script>
-        let currentEditRow = null;
+        let transactions = []; // Array to store all transactions
         let currentPage = 1;
         let recordsPerPage = 10;
-
-        document.querySelectorAll('input').forEach(input => {
-            input.addEventListener('keypress', function (event) {
-                if (event.key === 'Enter') {
-                    addTransaction();
-                }
-            });
-        });
 
         function addTransaction() {
             const date = document.getElementById("date").value;
@@ -338,31 +330,16 @@
                 return;
             }
 
-            // Add unique account type to the dropdown list if it doesn't exist
-            const accountTypesList = document.getElementById("accountTypes");
-            if (![...accountTypesList.options].some(option => option.value === accountTypeInput)) {
-                const newOption = document.createElement("option");
-                newOption.value = accountTypeInput;
-                accountTypesList.appendChild(newOption);
-            }
+            const transaction = {
+                date,
+                description,
+                accountType: accountTypeInput,
+                price: parseFloat(price).toFixed(2),
+                transactionType,
+                reconciled: false,
+            };
 
-            const tableBody = document.getElementById("tableBody");
-            const newRow = document.createElement("tr");
-
-            newRow.innerHTML = `
-                <td>${date}</td>
-                <td>${description}</td>
-                <td>${accountTypeInput}</td>
-                <td>${parseFloat(price).toFixed(2)}</td>
-                <td>${transactionType}</td>
-                <td><input type="checkbox" class="reconciled-checkbox"></td>
-                <td>
-                    <button class="action-btn edit-btn" onclick="editTransaction(this)">✏️</button>
-                    <button class="action-btn delete-btn" onclick="deleteTransaction(this)">🗑️</button>
-                </td>
-            `;
-
-            tableBody.appendChild(newRow);
+            transactions.push(transaction);
             renderTable();
 
             // Clear form inputs
@@ -374,42 +351,60 @@
         }
 
         function editTransaction(button) {
-            const row = button.parentElement.parentElement;
-            currentEditRow = row;
+            const rowIndex = parseInt(button.getAttribute('data-index'));
+            const transaction = transactions[rowIndex];
+            currentEditRow = rowIndex;
 
-            // Populate form with the row data
-            document.getElementById("date").value = row.cells[0].innerText;
-            document.getElementById("description").value = row.cells[1].innerText;
-            document.getElementById("accountType").value = row.cells[2].innerText;
-            document.getElementById("price").value = row.cells[3].innerText;
-            document.getElementById("transactionType").checked = (row.cells[4].innerText === "Income");
+            // Populate form with the transaction data
+            document.getElementById("date").value = transaction.date;
+            document.getElementById("description").value = transaction.description;
+            document.getElementById("accountType").value = transaction.accountType;
+            document.getElementById("price").value = transaction.price;
+            document.getElementById("transactionType").checked = (transaction.transactionType === "Income");
+
             document.getElementById("addButton").innerText = "Update Transaction";
         }
 
         function deleteTransaction(button) {
-            const row = button.parentElement.parentElement;
-            row.remove();
+            const rowIndex = parseInt(button.getAttribute('data-index'));
+            transactions.splice(rowIndex, 1);
             renderTable();
         }
 
         function renderTable() {
             const tableBody = document.getElementById("tableBody");
-            const rows = Array.from(tableBody.querySelectorAll("tr"));
             tableBody.innerHTML = "";
 
             const start = (currentPage - 1) * recordsPerPage;
             const end = start + recordsPerPage;
 
-            rows.slice(start, end).forEach(row => {
-                tableBody.appendChild(row);
+            transactions.slice(start, end).forEach((transaction, index) => {
+                const newRow = document.createElement("tr");
+
+                newRow.innerHTML = `
+                    <td>${transaction.date}</td>
+                    <td>${transaction.description}</td>
+                    <td>${transaction.accountType}</td>
+                    <td>${transaction.price}</td>
+                    <td>${transaction.transactionType}</td>
+                    <td><input type="checkbox" class="reconciled-checkbox" ${transaction.reconciled ? "checked" : ""} onchange="toggleReconciled(${start + index})"></td>
+                    <td>
+                        <button class="action-btn edit-btn" data-index="${start + index}" onclick="editTransaction(this)">✏️</button>
+                        <button class="action-btn delete-btn" data-index="${start + index}" onclick="deleteTransaction(this)">🗑️</button>
+                    </td>
+                `;
+                tableBody.appendChild(newRow);
             });
 
             document.getElementById("currentPage").innerText = currentPage;
         }
 
+        function toggleReconciled(index) {
+            transactions[index].reconciled = !transactions[index].reconciled;
+        }
+
         function nextPage() {
-            const totalRows = document.querySelectorAll("#tableBody tr").length;
-            if ((currentPage * recordsPerPage) < totalRows) {
+            if ((currentPage * recordsPerPage) < transactions.length) {
                 currentPage++;
                 renderTable();
             }
@@ -428,64 +423,15 @@
             renderTable();
         }
 
-        function exportToJson() {
-            const rows = document.querySelectorAll("#tableBody tr");
-            const transactions = Array.from(rows).map(row => {
-                return {
-                    date: row.cells[0].innerText,
-                    description: row.cells[1].innerText,
-                    accountType: row.cells[2].innerText,
-                    price: parseFloat(row.cells[3].innerText),
-                    transactionType: row.cells[4].innerText,
-                    reconciled: row.querySelector(".reconciled-checkbox").checked
-                };
-            });
-            const json = JSON.stringify(transactions, null, 2);
-            navigator.clipboard.writeText(json).then(() => {
-                alert("Data copied to clipboard as JSON");
-            });
-        }
-
-        function openImportModal() {
-            document.getElementById("importModal").style.display = "block";
-        }
-
-        function closeImportModal() {
-            document.getElementById("importModal").style.display = "none";
-        }
-
         function importFromJson() {
             const jsonInput = document.getElementById("jsonInput").value;
             try {
-                const transactions = JSON.parse(jsonInput);
-                if (!Array.isArray(transactions)) throw new Error("Invalid JSON format");
+                const importedTransactions = JSON.parse(jsonInput);
+                if (!Array.isArray(importedTransactions)) throw new Error("Invalid JSON format");
 
-                const tableBody = document.getElementById("tableBody");
-                const accountTypesList = document.getElementById("accountTypes");
-                tableBody.innerHTML = "";
-
-                transactions.forEach(transaction => {
-                    const newRow = document.createElement("tr");
-                    newRow.innerHTML = `
-                        <td>${transaction.date}</td>
-                        <td>${transaction.description}</td>
-                        <td>${transaction.accountType}</td>
-                        <td>${parseFloat(transaction.price).toFixed(2)}</td>
-                        <td>${transaction.transactionType}</td>
-                        <td><input type="checkbox" class="reconciled-checkbox" ${transaction.reconciled ? "checked" : ""}></td>
-                        <td>
-                            <button class="action-btn edit-btn" onclick="editTransaction(this)">✏️</button>
-                            <button class="action-btn delete-btn" onclick="deleteTransaction(this)">🗑️</button>
-                        </td>
-                    `;
-                    tableBody.appendChild(newRow);
-
-                    // Add unique account types to the dropdown
-                    if (![...accountTypesList.options].some(option => option.value === transaction.accountType)) {
-                        const newOption = document.createElement("option");
-                        newOption.value = transaction.accountType;
-                        accountTypesList.appendChild(newOption);
-                    }
+                importedTransactions.forEach(transaction => {
+                    transaction.reconciled = transaction.reconciled || false; // Default reconciled to false if not present
+                    transactions.push(transaction);
                 });
 
                 currentPage = 1;
@@ -503,17 +449,9 @@
             pdf.text("Transaction Tracker", 10, 10);
 
             let y = 20;
-            const rows = document.querySelectorAll("#tableBody tr");
-
-            rows.forEach(row => {
-                const date = row.cells[0].innerText;
-                const description = row.cells[1].innerText;
-                const accountType = row.cells[2].innerText;
-                const price = row.cells[3].innerText;
-                const transactionType = row.cells[4].innerText;
-                const reconciled = row.querySelector(".reconciled-checkbox").checked ? "Reconciled" : "Not Reconciled";
-
-                pdf.text(`${date} | ${description} | ${accountType} | $${price} | ${transactionType} | ${reconciled}`, 10, y);
+            transactions.forEach(transaction => {
+                const reconciledText = transaction.reconciled ? "Reconciled" : "Not Reconciled";
+                pdf.text(`${transaction.date} | ${transaction.description} | ${transaction.accountType} | $${transaction.price} | ${transaction.transactionType} | ${reconciledText}`, 10, y);
                 y += 10;
             });
 
